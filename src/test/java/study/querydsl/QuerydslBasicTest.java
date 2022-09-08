@@ -2,7 +2,6 @@ package study.querydsl;
 
 import static com.querydsl.jpa.JPAExpressions.*;
 import static org.assertj.core.api.Assertions.*;
-import static study.querydsl.entity.QMember.*;
 import static study.querydsl.entity.QMember.member;
 import static study.querydsl.entity.QTeam.*;
 
@@ -10,21 +9,22 @@ import java.util.List;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.PersistenceUnit;
-import javax.persistence.TypedQuery;
 
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
-import com.querydsl.jpa.JPAExpressions;
+import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Commit;
 import org.springframework.transaction.annotation.Transactional;
+import study.querydsl.dto.MemberDto;
+import study.querydsl.dto.QMemberDto;
+import study.querydsl.dto.UserDto;
 import study.querydsl.entity.Member;
 import study.querydsl.entity.QMember;
-import study.querydsl.entity.QTeam;
 import study.querydsl.entity.Team;
 
 @SpringBootTest
@@ -80,7 +80,7 @@ public class QuerydslBasicTest
 
     @Test
     public void search(){
-        Member a = new Member(null,1,null);
+        Member a = new Member("member1",1,null);
         Member findMember = queryFactory.selectFrom(member)
             .where(
                 member.username.eq(a.getUsername())
@@ -178,11 +178,28 @@ public class QuerydslBasicTest
         }
     }
 
+    /*연관관계가 없는 엔티티 외부 조인*/
+    @Test
+    public void join_on_no_relateion(){
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+        em.persist(new Member("teamC"));
+
+        queryFactory
+            .select(member,team)
+            .from(member)
+            .leftJoin(team).on(member.username.eq(team.name))
+            .fetch();
+    }
+
+
+
     /*Fetch Join*/
     @PersistenceUnit
     EntityManagerFactory emf;
     @Test
     public void fetchJoinNo(){
+        //영속성 깔끔하게 비우기
         em.flush();
         em.clear();
 
@@ -191,6 +208,7 @@ public class QuerydslBasicTest
             .where(QMember.member.username.eq("member1"))
             .fetchOne();
 
+        assert member != null;
         boolean loaded = emf.getPersistenceUnitUtil().isLoaded(member.getTeam());
         assertThat(loaded).as("페이조인 미적용").isFalse();
 
@@ -269,5 +287,164 @@ public class QuerydslBasicTest
                 tuple.get(select(memberSub.age.avg())
                     .from(memberSub)));
         }
+    }
+
+    @Test
+    @Commit
+    public void test(){
+        Member member = new Member("AAA", 10);
+        Team team = new Team("AAA");
+
+        member.changTeam(team);
+
+        em.persist(member);
+        em.persist(team);
+
+        em.flush();
+        em.clear();
+
+        assertThat(member.getTeam()).isEqualTo(team);
+
+    }
+
+    @Test
+    public void simpleProjection(){
+        List<String> result = queryFactory
+            .select(member.username)
+            .from(member)
+            .fetch();
+
+        for (String s : result)
+        {
+            System.out.println("s = " + s);
+        }
+
+    }
+
+    @Test
+    public void tupleProjection(){
+        /*
+        * Tuple - com.querydsl.core
+        * Tuple 을 사용할 땐 Repository 계층정도에서만 사용.
+        * Service 계층에서는 사용하지 말 것.
+        * */
+        List<Tuple> fetch = queryFactory
+            .select(member.username, member.age)
+            .from(member)
+            .fetch();
+
+        for (Tuple tuple : fetch)
+        {
+            String username = tuple.get(member.username);
+            Integer age = tuple.get(member.age);
+            System.out.println(username);
+            System.out.println(age);
+        }
+
+    }
+
+    @Test
+    public void findDtoByJPQL(){
+    List<MemberDto> resultList = em.createQuery("select new study.querydsl.dto.MemberDto(m.username, m.age) from Member m", MemberDto.class)
+        .getResultList();
+
+        for (MemberDto memberDto : resultList)
+        {
+            System.out.println(memberDto);
+        }
+
+    }
+    @Test
+    public void findDtoBySetter(){
+        //Setter로 주입
+        //기본생성자 필요
+        List<MemberDto> fetch = queryFactory
+            .select(Projections.bean(MemberDto.class,
+                member.username,
+                member.age))
+            .from(member)
+            .fetch();
+        for (MemberDto memberDto : fetch)
+        {
+            System.out.println(memberDto);
+        }
+
+    }
+    @Test
+    public void findDtoByField(){
+        //Field로 주입
+        List<MemberDto> fetch = queryFactory
+            .select(Projections.fields(MemberDto.class,
+                member.username,
+                member.age))
+            .from(member)
+            .fetch();
+        for (MemberDto memberDto : fetch)
+        {
+            System.out.println(memberDto);
+        }
+
+    }
+    @Test
+    public void findDtoByConstructor(){
+        //해당 dto의 타입이 맞아야 함.
+        List<MemberDto> fetch = queryFactory
+            .select(Projections.constructor(MemberDto.class,
+                member.username,
+                member.age))
+            .from(member)
+            .fetch();
+        for (MemberDto memberDto : fetch)
+        {
+            System.out.println(memberDto);
+        }
+
+    }
+    @Test
+    public void findUserDto(){
+        //Dto의 필드이름이 다른경우
+        // as 로 Alias를 넣어줄 수 있음.
+        List<UserDto> fetch = queryFactory
+            .select(Projections.fields(UserDto.class,
+                member.username.as("name"),
+                member.age))
+            .from(member)
+            .fetch();
+        for (UserDto memberDto : fetch)
+        {
+            System.out.println(memberDto);
+        }
+
+    }
+    @Test
+    public void findUserDtoByConstructor(){
+        //해당 dto의 타입이 맞아야 함.
+        List<UserDto> fetch = queryFactory
+            .select(Projections.constructor(UserDto.class,
+                member.username,
+                member.age))
+            .from(member)
+            .fetch();
+        for (UserDto memberDto : fetch)
+        {
+            System.out.println(memberDto);
+        }
+    }
+
+    @Test
+    public void findDtoByQueryProjection(){
+        // 생성자 방식은 런타임오류가 나고
+        // 이 방식은 들어가는 타입을 확인할 수 있고, 만약 값이 잘못들어가게 되면 컴파일오류 발생.
+        // 단점 : Q파일을 생성해야함.
+        // 단점 : DTO가 queryDsl에 대한 의존성이 생김.
+        List<MemberDto> fetch = queryFactory
+            .select(new QMemberDto(member.username, member.age))
+            .from(member)
+            .fetch();
+        for (MemberDto memberDto : fetch)
+        {
+            System.out.println(memberDto);
+        }
+
     }
 }

@@ -35,7 +35,7 @@ public class Member
         }
     }
 
-    private void changTeam(Team team)
+    public void changTeam(Team team)
     {
         this.team = team;
         team.getMembers().add(this);
