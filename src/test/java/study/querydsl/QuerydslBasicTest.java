@@ -16,6 +16,7 @@ import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -557,5 +558,37 @@ public class QuerydslBasicTest
             .delete(member)
             .where(member.age.gt(18))//18 이상
             .execute();
+    }
+
+    @Test
+    public void sqlFunction(){
+        List<String> result = queryFactory
+            .select(
+                Expressions.stringTemplate("function('replace',{0},{1},{2})",
+                    member.username, "member", "M"))
+            .from(member)
+            .fetch();
+        for (String s : result)
+        {
+            System.out.println("s = " + s);
+        }
+
+    }
+
+    @Test
+    public void sqlFunction2(){
+        List<String> fetch = queryFactory
+            .select(member.username)
+            .from(member)
+//            .where(member.username.eq(
+//                Expressions.stringTemplate("function('lower',{0})", member.username)
+//            ))
+            .where(member.username.eq(member.username.lower()))
+            .fetch();
+        for (String s : fetch)
+        {
+            System.out.println("s = " + s);
+        }
+
     }
 }
