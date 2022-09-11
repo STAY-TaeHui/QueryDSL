@@ -506,4 +506,56 @@ public class QuerydslBasicTest
     private BooleanExpression allEq(String useranmeCond, Integer ageCond){
         return usernameEq(useranmeCond).and(ageEq(ageCond));
     }
+
+
+    @Test
+    public void bulkUpdate(){
+        /*
+        * 변경감지로 update를 하면 쿼리를 한번씩 계속날림.
+        * 많은 update를 하기 위해서는 변경감지 보다 update 쿼리를 날리는게 낫다.
+        *
+        * 벌크연산은 영속성 컨텍스트를 무시하고 바로 쿼리가 날라감.
+        * 여기서 문제는 영속성 컨텍스트 vs DB 이다.
+        *
+        * 쿼리가 날라간 이후 DB의 값과 컨텍스트의 값이 달라지는데 
+        * Select 를 하여 데이터를 가져올때 영속석컨텍스트가 우선권을 가져,
+        * 영속성 컨텍스트의 값을 가져오게 됨
+        * */
+        //member1 = 10 -> 비회원
+        //member2 = 20 -> 비회원
+        queryFactory
+            .update(member)
+            .set(member.username, "비회원")
+            .where(member.age.lt(28)) //28이하
+            .execute();
+
+        //DB와 영속성 컨텍스트 값이 맞지 않기때문에
+        //flush + clear 로 둘 의 값을 맞춰준다.
+        em.flush();
+        em.clear();
+
+        List<Member> result = queryFactory.selectFrom(member)
+            .fetch();
+        for (Member member1 : result)
+        {
+            System.out.println(member1);
+        }
+
+    }
+
+    @Test
+    public void bulkAdd(){
+        queryFactory
+            .update(member)
+            .set(member.age, member.age.add(1))
+            .execute();
+    }
+
+    @Test
+    public void bulkDelete(){
+        queryFactory
+            .delete(member)
+            .where(member.age.gt(18))//18 이상
+            .execute();
+    }
 }
